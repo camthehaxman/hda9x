@@ -166,7 +166,12 @@ typedef CRS *PCRS;
 #define GET_CONTENTION_HANDLER  0x0030
 #define KERNEL32_INITIALIZED    0x0031
 #define KERNEL32_SHUTDOWN       0x0032
-#define MAX_SYSTEM_CONTROL      0x0032
+// New in Windows 98
+#define CREATE_PROCESS          0x0033
+#define DESTROY_PROCESS         0x0034
+#define SYS_DYNAMIC_DEVICE_REINIT 0x0035
+#define SYS_POWER_DOWN          0x0036
+#define MAX_SYSTEM_CONTROL      0x0036
 
 //------------------------------------------------------------------------------
 // VMM services

@@ -45,36 +45,45 @@ static CONFIGRET __cdecl driver_config_handler(CONFIGFUNC func, SUBCONFIGFUNC su
 	return CR_DEFAULT;
 }
 
+static const char *control_msg_name(DWORD msg)
+{
+	static char buf[32];
+	switch(msg)
+	{
+#define X(x) case x: return #x;
+	X(SYS_CRITICAL_INIT)
+	X(DEVICE_INIT)
+	X(INIT_COMPLETE)
+	X(SYS_VM_INIT)
+	X(SET_DEVICE_FOCUS)
+	X(BEGIN_PM_APP)
+	X(DESTROY_THREAD)
+	X(POWER_EVENT)
+	X(SYS_DYNAMIC_DEVICE_INIT)
+	X(SYS_DYNAMIC_DEVICE_EXIT)
+	X(THREAD_Not_Executeable)
+	X(CREATE_THREAD)
+	X(THREAD_INIT)
+	X(TERMINATE_THREAD)
+	X(PNP_NEW_DEVNODE)
+	X(KERNEL32_INITIALIZED)
+	X(CREATE_PROCESS)
+	X(DESTROY_PROCESS)
+#undef X
+	default:
+		sprintf(buf, "(unknown 0x%X)", msg);
+		return buf;
+	}
+}
+
 // Handler for system control messages
 // Returns 0 on error
 DWORD __cdecl hda_vxd_control_proc(DWORD msg, DWORD paramEBX, DWORD paramEDX)
 {
 	hda_debug_init();
 
-	char *name = "(unknown)";
-	switch(msg)
-	{
-#define GET_NAME(x) case x: name = #x; break;
-	GET_NAME(SYS_CRITICAL_INIT)
-	GET_NAME(DEVICE_INIT)
-	GET_NAME(INIT_COMPLETE)
-	GET_NAME(SYS_VM_INIT)
-	GET_NAME(SET_DEVICE_FOCUS)
-	GET_NAME(BEGIN_PM_APP)
-	GET_NAME(DESTROY_THREAD)
-	GET_NAME(POWER_EVENT)
-	GET_NAME(SYS_DYNAMIC_DEVICE_INIT)
-	GET_NAME(SYS_DYNAMIC_DEVICE_EXIT)
-	GET_NAME(THREAD_Not_Executeable)
-	GET_NAME(CREATE_THREAD)
-	GET_NAME(THREAD_INIT)
-	GET_NAME(TERMINATE_THREAD)
-	GET_NAME(PNP_NEW_DEVNODE)
-	GET_NAME(KERNEL32_INITIALIZED)
-#undef GET_NAME
-	}
-	dprintf("hda_vxd_control_proc(msg=%s (0x%X), paramEBX=0x%X, paramEDX=0x%X)\n",
-		name, msg, paramEBX, paramEDX);
+	dprintf("hda_vxd_control_proc(msg=%s, paramEBX=0x%X, paramEDX=0x%X)\n",
+		control_msg_name(msg), paramEBX, paramEDX);
 
 	switch (msg)
 	{

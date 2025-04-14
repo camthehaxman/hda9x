@@ -24,7 +24,8 @@ clean: .symbolic
 # Compiler options
 #-------------------------------------------------------------------------------
 
-DEFINES = -dDRV_VER_MAJOR=0 -dDRV_VER_MINOR=1 -dDEBUG=1
+INCLUDES = -I$(%WATCOM)/h -I$(%WATCOM)/h/win -Iddk -Iextern/tinyprintf
+DEFINES  = -dDRV_VER_MAJOR=0 -dDRV_VER_MINOR=1 -dDEBUG=1
 
 # Common compiler flags
 # -q           quiet mode
@@ -38,16 +39,16 @@ DEFINES = -dDRV_VER_MAJOR=0 -dDRV_VER_MINOR=1 -dDEBUG=1
 # -d3          enable debugging info
 # -fo=$@       output filename (expanded in recipe)
 # $<           input filename (expanded in recipe)
-CFLAGS = -q -zastd=c99 -wx -wcd=303 -wcd=202 -s -bt=windows -d3 -fo=$@ $< $(DEFINES)
+CFLAGS = -q -zastd=c99 -wx -wcd=303 -wcd=202 -s -bt=windows -d3 -fo=$@ $< $(INCLUDES) $(DEFINES)
 
 # Compile 32-bit C code (for VxD)
-COMPILE32 = wcc386 $(CFLAGS) -I$(%WATCOM)/h -I$(%WATCOM)/h/win -Iddk -Iextern/tinyprintf
+COMPILE32 = wcc386 $(CFLAGS)
 
 # Assemble 32-bit assembly code (for VxD)
 ASM32 = wasm -4 -mf -cx -fo=$@ $< $(DEFINES)
 
 # Compile 16-bit C code (for userspace driver DLL)
-COMPILE16 = wcc $(CFLAGS) -mc -zu -bd -zc -I$(%WATCOM)/h -I$(%WATCOM)/h/win -Iextern/tinyprintf $(DEFINES)
+COMPILE16 = wcc $(CFLAGS) -mc -zu -bd -zc
 
 #-------------------------------------------------------------------------------
 # 16-bit userspace driver DLL
