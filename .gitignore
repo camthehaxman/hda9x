@@ -1,0 +1,8 @@
+*.obj
+*.err
+*.map
+*.drv
+*.vxd
+*.img
+*.lst
+fixlink

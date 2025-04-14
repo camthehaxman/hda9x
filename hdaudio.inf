@@ -1,0 +1,65 @@
+; Installation file for HD Audio driver
+
+[version]
+Signature="$CHICAGO$"
+Class=Media
+Provider=%Mfg%
+
+; DDK says we should have entries to install the class, even though it should already exist.
+[ClassInstall]
+AddReg=Class.AddReg
+
+[Class.AddReg]
+HKR,,,,%MediaClassName%
+HKR,,Icon,,"-1"
+HKR,,Installer,,mmci.dll
+
+; 11 is the C:\WINDOWS\SYSTEM directory
+[DestinationDirs]
+DefaultDestDir = 11
+MyDriver.Copy = 11
+
+[SourceDisksNames]
+1=%MyDriver.DiskName%,,0
+
+; List of devices for each manufacturer
+[Manufacturer]
+"%Mfg%"=DeviceList
+
+; Install instructions for each device
+[DeviceList]
+; Emulated by QEMU
+%Dev2688.DeviceDesc%=MyDriver.Install, PCI\VEN_8086&DEV_2668
+; Some IDs I found on random PCs
+%Dev284B.DeviceDesc%=MyDriver.Install, PCI\VEN_8086&DEV_284B
+;%DevA2F0.DeviceDesc%=MyDriver.Install, PCI\VEN_8086&DEV_A2F0
+; Generic
+%Generic.DeviceDesc%=MyDriver.Install, PCI\CC_0403
+
+
+[MyDriver.Install]
+CopyFiles=MyDriver.Copy
+AddReg=MyDriver.AddReg
+
+[MyDriver.Copy]
+hdaudio.drv
+hdaudio.vxd
+
+[MyDriver.AddReg]
+; Not entirely sure what these registry keys are. I'm just copying from examples.
+HKR,,DevLoader,0,mmdevldr.vxd
+HKR,,Driver,,hdaudio.vxd
+HKR,Drivers,MIGRATED,0,0
+HKR,Drivers,SubClasses,,"wave"
+HKR,Drivers\wave,,0,
+HKR,Drivers\wave\hdaudio.drv,Driver,,hdaudio.drv
+HKR,Drivers\wave\hdaudio.drv,Description,,%MyDriver.DeviceDesc%
+
+[Strings]
+Mfg="None"
+Dev2688.DeviceDesc="Intel (ICH6 Family) HD Audio Controller"
+Dev284B.DeviceDesc="Intel (ICH8 Family) HD Audio Controller"
+DevA2F0.DeviceDesc="Intel 200 Series PCH HD Audio Controller"
+Generic.DeviceDesc="Generic High Definition Audio Controller"
+MyDriver.DiskName="Intel HD Audio Driver Disk"
+MediaClassName="Sound, video and game controllers"
