@@ -1,8 +1,9 @@
-*.obj
-*.err
-*.map
 *.drv
-*.vxd
+*.err
 *.img
+*.iso
 *.lst
+*.map
+*.obj
+*.vxd
 fixlink

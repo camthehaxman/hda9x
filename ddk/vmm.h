@@ -111,6 +111,43 @@ typedef union tagCLIENT_STRUC
 typedef struct Client_Reg_Struc CRS;
 typedef CRS *PCRS;
 
+// Page types for page allocator calls
+#define PG_VM	     0
+#define PG_SYS	     1
+#define PG_RESERVED1 2
+#define PG_PRIVATE   3
+#define PG_RESERVED2 4
+#define PG_RELOCK    5  // Private to MMGR
+#define PG_INSTANCE  6
+#define PG_HOOKED    7
+#define PG_IGNORE    0xFFFFFFFF
+
+// Flags for page allocator calls
+// Note: high 8 bits (bits 24-31) are reserved
+#define PAGEZEROINIT           0x00000001
+#define PAGEUSEALIGN           0x00000002
+#define PAGECONTIG             0x00000004
+#define PAGEFIXED              0x00000008
+#define PAGEDEBUGNULFAULT      0x00000010
+#define PAGEZEROREINIT         0x00000020
+#define PAGENOCOPY             0x00000040
+#define PAGELOCKED             0x00000080
+#define PAGELOCKEDIFDP         0x00000100
+#define PAGESETV86PAGEABLE     0x00000200
+#define PAGECLEARV86PAGEABLE   0x00000400
+#define PAGESETV86INTSLOCKED   0x00000800
+#define PAGECLEARV86INTSLOCKED 0x00001000
+#define PAGEMARKPAGEOUT        0x00002000
+#define PAGEPDPSETBASE         0x00004000
+#define PAGEPDPCLEARBASE       0x00008000
+#define PAGEDISCARD            0x00010000
+#define PAGEPDPQUERYDIRTY      0x00020000
+#define PAGEMAPFREEPHYSREG     0x00040000
+#define PAGEPHYSONLY           0x04000000
+#define PAGENOMOVE             0x10000000
+#define PAGEMAPGLOBAL          0x40000000
+#define PAGEMARKDIRTY          0x80000000
+
 //------------------------------------------------------------------------------
 // VxD system control messages
 //------------------------------------------------------------------------------
@@ -294,6 +331,30 @@ typedef CRS *PCRS;
 #define SVC__MapPhysToLinear  VXD_SERVICE(VMM_DEVICE_ID, 108)
 #define SVC_Out_Debug_String  VXD_SERVICE(VMM_DEVICE_ID, 194)
 #define SVC_Out_Debug_Chr     VXD_SERVICE(VMM_DEVICE_ID, 195)
+
+static PVOID __declspec(naked) __cdecl
+_HeapAllocate(ULONG nBytes, ULONG flags)
+{
+	VxDJmp(SVC__HeapAllocate)
+}
+
+static ULONG __declspec(naked) __cdecl
+_HeapFree(PVOID hAddress, ULONG flags)
+{
+	VxDJmp(SVC__HeapFree)
+}
+
+static PVOID __declspec(naked) __cdecl
+_PageAllocate(DWORD nPages, DWORD pType, HVM hvm, DWORD AlignMask, DWORD minPhys, DWORD maxPhys, PVOID *PhysAddr, DWORD flags)
+{
+	VxDJmp(SVC__PageAllocate)
+}
+
+static PVOID __declspec(naked) __cdecl
+_MapPhysToLinear(ULONG PhysAddr, ULONG nBytes, ULONG flags)
+{
+	VxDJmp(SVC__MapPhysToLinear)
+}
 
 static VOID __declspec(naked)
 Out_Debug_String(const char *s)

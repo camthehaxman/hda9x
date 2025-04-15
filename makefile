@@ -81,18 +81,16 @@ export wodMessage.3
 # 32-bit kernel-mode VxD
 #-------------------------------------------------------------------------------
 
-VXD_OBJS = vxd_entry.obj hda_main.obj hda_debug.obj tinyprintf32.obj
+VXD_OBJS = vxd_entry.obj hda_main.obj hda_debug.obj memory.obj tinyprintf32.obj
 
 # Compile
-# TODO: use wasm instead
-ML = wine ~/.wine/drive_c/masm32/bin/ml.exe
-#vxd_entry.obj : vxd_entry.asm
-#	$(ML) -nologo -coff -DBLD_COFF -W2 -Zd -c -Cx -DMASM6 -Sg -Iddk -Fl -Fo$@ $<
 vxd_entry.obj : vxd_entry.asm
 	$(ASM32)
 hda_main.obj : hda_main.c .autodepend
 	$(COMPILE32)
 hda_debug.obj : hda_debug.c .autodepend
+	$(COMPILE32)
+memory.obj : memory.c .autodepend
 	$(COMPILE32)
 tinyprintf32.obj : extern/tinyprintf/tinyprintf.c .autodepend
 	$(COMPILE32)
@@ -121,3 +119,7 @@ install.img : $(DISK_FILES)
 	dd if=/dev/zero of=$@ bs=512 count=2880
 	mformat -i $@
 	mcopy -i $@ $< ::
+
+install.iso : $(DISK_FILES)
+	@echo Creating setup CD-ROM $@
+	$(QUIET) mkisofs -o $@ $<

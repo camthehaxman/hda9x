@@ -24,3 +24,11 @@ void hda_debug_init(void)
 		initialized = TRUE;
 	}
 }
+
+void hda_debug_assert_fail(const char *expr, const char *file, int line)
+{
+	dprintf("*** ASSERTION FAILED ***\n");
+	printf("file %s, line %i: %s\n", file, line, expr);
+	while (1)
+		;
+}
