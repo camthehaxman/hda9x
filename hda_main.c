@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <string.h>
 #include <windows.h>
 #include <vmm.h>
@@ -7,6 +8,8 @@
 
 #include "hdaudio.h"
 #include "memory.h"
+
+typedef uint16_t nodeid_t;
 
 struct HDARegs *hdaRegs;
 unsigned int hdaIRQNum;
@@ -31,11 +34,36 @@ physaddr_t        rirbPhys;
 unsigned int      rirbLength;
 unsigned int      rirbRP;
 
+#define MAX_CONNECTIONS 16
+
+struct HDAWidget
+{
+	nodeid_t nodeID;
+	uint8_t type;
+	uint8_t connectionsCount;
+	nodeid_t connections[MAX_CONNECTIONS];  // list of possible inputs to this widget
+	nodeid_t outPath;  // next node in path to "Audio Output" widget, or 0 if none
+	uint32_t caps;
+	// specific to Pin Complex
+	uint32_t pinCaps;
+};
+
+struct HDAAudioFuncGroup
+{
+	nodeid_t nodeID;
+	uint8_t widgetsStart;  // starting node ID of child widgets
+	uint8_t widgetsCount;  // number of child widgets
+	struct HDAWidget *widgets;
+};
+
 struct HDACodec
 {
 	uint8_t addr;
 	uint8_t childStart;
 	uint8_t childCount;
+	// We only support a single audio function group. While the standard doesn't
+	// forbid there being multiple, this would be unusual.
+	struct HDAAudioFuncGroup afg;
 };
 
 #define MAX_CODECS 15
@@ -214,7 +242,7 @@ static BOOL hda_controller_setup_corb_rirb(void)
 	// Reset RIRB write pointer to 0 (HDA spec section 3.3.27)
 	hdaRegs->RIRBWP |= RIRBWP_RIRBWPRST;
 
-	hdaRegs->RINTCNT = 1;  // seems to be needed for QEMU's emulated card but not real hardware?
+	hdaRegs->RINTCNT = 255;  // seems to be needed for QEMU's emulated card but not real hardware?
 
 	// Start CORB/RIRB DMA
 	hdaRegs->CORBCTL |= CORBCTL_CORBRUN | CORBCTL_CMEIE;
@@ -318,13 +346,224 @@ static BOOL hda_controller_enum_codecs(void)
 // HDA codecs
 //------------------------------------------------------------------------------
 
-static void hda_codec_init(struct HDACodec *codec)
+// Returns the widget in the codec with the given node ID
+static struct HDAWidget *get_widget_by_id(struct HDACodec *codec, nodeid_t nodeID)
+{
+	ASSERT(nodeID >= codec->afg.widgetsStart && nodeID < codec->afg.widgetsStart + codec->afg.widgetsCount);
+	struct HDAWidget *widget = &codec->afg.widgets[nodeID - codec->afg.widgetsStart];
+	ASSERT(widget->nodeID == nodeID);
+	return widget;
+}
+
+// Recursively finds the shortest path from the widget to an Audio Output widget
+// and selects the connection
+// Returns the length of the path
+static int find_output_path(struct HDACodec *codec, struct HDAWidget *widget)
+{
+	uint32_t command, response;
+	int pathLen = INT_MAX;
+	widget->outPath = 0;
+
+	for (int i = 0; i < widget->connectionsCount; i++)
+	{
+		uint16_t nodeID = widget->connections[i];
+		if (nodeID == 0)  // Some codecs have widgets with zeros as the connections for some reason. Ignore those.
+			continue;
+		struct HDAWidget *input = get_widget_by_id(codec, nodeID);
+		if (input->type == WIDGET_TYPE_AUDIO_OUTPUT)
+		{
+			// found it!
+			pathLen = 1;
+			widget->outPath = nodeID;
+			break;
+		}
+		int len = 1 + find_output_path(codec, input);
+		if (len < pathLen)
+		{
+			pathLen = len;
+			widget->outPath = nodeID;
+		}
+	}
+
+	// Select the connection
+	if (pathLen < INT_MAX)
+	{
+		if (widget->type != WIDGET_TYPE_AUDIO_MIXER)  // Mixers have a hard-wired list of inputs and grab audio from all of them, therefore not selectable
+		{
+			int i;
+			for (i = 0; i < widget->connectionsCount; i++)
+				if (widget->outPath == widget->connections[i])
+					break;
+			ASSERT(i < widget->connectionsCount);
+			command = MAKE_COMMAND(codec->addr, widget->nodeID, VERB_SET_CONNECTION_SELECT_CTRL, i);
+			hda_run_commands(&command, &response, 1);
+		}
+	}
+
+	return pathLen;
+}
+
+static void unmute_widget(struct HDACodec *codec, struct HDAWidget *widget)
 {
 	uint32_t commands[1], responses[1];
+	if (widget->caps & WIDGET_CAP_OUTPUT_AMP)
+	{
+		commands[0] = MAKE_COMMAND(codec->addr, widget->nodeID, VERB_GET_PARAMETER, PARAM_OUTPUT_AMP_CAP);
+		hda_run_commands(commands, responses, 1);
+		int maxGain = GET_BITS(responses[0], 8, 7);  // NumSteps field
+		uint32_t ampGainMute = maxGain | (1 << 15) | (1 << 13) | (1 << 12);
+		commands[0] = MAKE_COMMAND(codec->addr, widget->nodeID, VERB_SET_AMP_GAIN_MUTE, ampGainMute);
+		hda_run_commands(commands, responses, 1);
+	}
+}
+
+static BOOL hda_func_group_init(struct HDACodec *codec, struct HDAAudioFuncGroup *afg)
+{
+	uint32_t commands[2], responses[2];
+	struct HDAWidget *widget;
+
+	dprintf(" Audio Function Group #%i\n", afg->nodeID);
+	afg->widgets = memory_alloc(sizeof(*afg->widgets) * afg->widgetsCount);
+	if (afg->widgets == NULL)
+	{
+		dprintf("memory allocation failed\n");
+		return FALSE;
+	}
+	memset(afg->widgets, 0, sizeof(*afg->widgets) * afg->widgetsCount);
+
+	// Collect information about widgets and initialize them
+	widget = afg->widgets;
+	for (nodeid_t nodeID = afg->widgetsStart; nodeID < afg->widgetsCount; nodeID++, widget++)
+	{
+		commands[0] = MAKE_COMMAND(codec->addr, nodeID, VERB_GET_PARAMETER, PARAM_AUDIO_WIDGET_CAP);
+		hda_run_commands(commands, responses, 1);
+		widget->caps = responses[0];
+		widget->nodeID = nodeID;
+		widget->type = GET_BITS(widget->caps, 20, 4);
+
+		dprintf("  Widget #%i, type = %i\n", nodeID, widget->type);
+
+		if (widget->type == WIDGET_TYPE_PIN_COMPLEX)
+		{
+			commands[0] = MAKE_COMMAND(codec->addr, nodeID, VERB_GET_PARAMETER, PARAM_PIN_CAP);
+			hda_run_commands(commands, responses, 1);
+			widget->pinCaps = responses[0];
+			// For some reason, EAPD needs to be enabled if the widget supports
+			// it, or else we just get silence
+			if (widget->pinCaps & PINCAP_EAPD)
+			{
+				commands[0] = MAKE_COMMAND(codec->addr, nodeID, VERB_SET_EAPD_ENABLE, (1 << 1));
+				hda_run_commands(commands, responses, 1);
+			}
+		}
+
+		widget->connectionsCount = 0;
+		if (widget->caps & WIDGET_CAP_CONN_LIST)
+		{
+			commands[0] = MAKE_COMMAND(codec->addr, nodeID, VERB_GET_PARAMETER, PARAM_CONN_LIST_LENGTH);
+			hda_run_commands(commands, responses, 1);
+			BOOL longForm = (responses[0] & (1 << 7)) != 0;
+			widget->connectionsCount = responses[0] & 0x3F;
+			int entriesPerResp = longForm ? 2 : 4;
+
+			if (widget->connectionsCount > MAX_CONNECTIONS)
+			{
+				widget->connectionsCount = MAX_CONNECTIONS;
+				dprintf("Warning: widget #%i's connection list is too long!\n", nodeID);
+			}
+			dprintf("   Connections (%i):\n", widget->connectionsCount);
+			dprintf("    ");
+			for (int i = 0; i < widget->connectionsCount; i++)
+			{
+				int index = i % entriesPerResp;
+				if (index == 0)
+				{
+					// fetch the next set of entries
+					commands[0] = MAKE_COMMAND(codec->addr, nodeID, VERB_GET_CONNECTION_LIST_ENTRY, i - index);
+					hda_run_commands(commands, responses, 1);
+				}
+				if (longForm)
+					widget->connections[i] = (responses[0] >> (index * 16)) & 0xFFFF;
+				else
+					widget->connections[i] = (responses[0] >> (index * 8)) & 0xFF;
+				dprintf("%i ", widget->connections[i]);
+			}
+			dprintf("\n");
+		}
+	}
+
+	// Find widget paths, from Pin Complex to Audio Output
+	widget = afg->widgets;
+	for (nodeid_t nodeID = afg->widgetsStart; nodeID < afg->widgetsCount; nodeID++, widget++)
+	{
+		if (widget->type == WIDGET_TYPE_PIN_COMPLEX && (widget->pinCaps & PINCAP_OUTPUT))
+		{
+			find_output_path(codec, widget);
+			if (widget->outPath != 0)
+			{
+				dprintf("enabling output pin %i\n", nodeID);
+				// enable output
+				uint32_t pinCtrl;
+				commands[0] = MAKE_COMMAND(codec->addr, widget->nodeID, VERB_GET_PIN_CONTROL, 0);
+				hda_run_commands(commands, &pinCtrl, 1);
+				pinCtrl |= PIN_CONTROL_OUTPUT_ENABLE;
+				commands[0] = MAKE_COMMAND(codec->addr, widget->nodeID, VERB_SET_PIN_CONTROL, pinCtrl);
+				hda_run_commands(commands, responses, 1);
+				// unmute all nodes in path
+				struct HDAWidget *w;
+				for (w = widget; w->outPath != 0; w = get_widget_by_id(codec, w->outPath))
+					unmute_widget(codec, w);
+				ASSERT(w->type == WIDGET_TYPE_AUDIO_OUTPUT);
+				unmute_widget(codec, w);
+				if (w->caps & WIDGET_CAP_DIGITAL)
+				{
+					// There's an extra bit that we need to enable for digital Audio Outputs
+					uint32_t digiconv;
+					commands[0] = MAKE_COMMAND(codec->addr, w->nodeID, VERB_GET_DIGICONVERT, 0);
+					hda_run_commands(commands, &digiconv, 1);
+					digiconv |= 1;
+					commands[0] = MAKE_COMMAND(codec->addr, w->nodeID, VERB_SET_DIGICONVERT0, (digiconv & 0xFF));
+					hda_run_commands(commands, responses, 1);
+				}
+			}
+		}
+	}
+
+	return TRUE;
+}
+
+static void hda_codec_init(struct HDACodec *codec)
+{
+	uint32_t commands[2], responses[2];
+	int childStart, childCount;
 
 	commands[0] = MAKE_COMMAND(codec->addr, 0, VERB_GET_PARAMETER, PARAM_VENDOR_ID);
-	hda_run_commands(commands, responses, 1);
-	printf("Codec %i, 0x%08X\n", codec->addr, responses[0]);
+	commands[1] = MAKE_COMMAND(codec->addr, 0, VERB_GET_PARAMETER, PARAM_SUB_NODE_COUNT);
+	hda_run_commands(commands, responses, 2);
+	childStart = GET_BITS(responses[1], 16, 8);
+	childCount = GET_BITS(responses[1], 0, 8);
+	codec->childStart = childStart;
+	codec->childCount = childCount;
+	dprintf("Codec %i, vendor/device=0x%08X, childStart=%i, childCount=%i\n", codec->addr, responses[0], childStart, childCount);
+
+	BOOL gotAFG = FALSE;
+
+	// Enumerate function groups
+	for (nodeid_t fgID = childStart; fgID < childStart + childCount; fgID++)
+	{
+		commands[0] = MAKE_COMMAND(codec->addr, fgID, VERB_GET_PARAMETER, PARAM_FUNC_GRP_TYPE);
+		commands[1] = MAKE_COMMAND(codec->addr, fgID, VERB_GET_PARAMETER, PARAM_SUB_NODE_COUNT);
+		hda_run_commands(commands, responses, 2);
+		if (GET_BITS(responses[0], 0, 8) == FUNC_GRP_AUDIO)
+		{
+			codec->afg.nodeID = fgID;
+			codec->afg.widgetsStart = GET_BITS(responses[1], 16, 8);
+			codec->afg.widgetsCount = GET_BITS(responses[1], 0, 8);
+			hda_func_group_init(codec, &codec->afg);
+			gotAFG = TRUE;
+			break;
+		}
+	}
 }
 
 //------------------------------------------------------------------------------

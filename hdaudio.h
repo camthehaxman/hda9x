@@ -89,8 +89,8 @@ enum
 	PARAM_VENDOR_ID           = 0,
 	PARAM_REVISION_ID         = 2,
 	PARAM_SUB_NODE_COUNT      = 4,
-	PARAM_FCT_GRP_TYPE        = 5,  // see section 7.3.4.4 (applies to function groups)
-	PARAM_AUDIO_FCT_GRP_CAP   = 8,  // see section 7.3.4.5 (applies to audio function group)
+	PARAM_FUNC_GRP_TYPE        = 5,  // see section 7.3.4.4 (applies to function groups)
+	PARAM_AUDIO_FUNC_GRP_CAP   = 8,  // see section 7.3.4.5 (applies to audio function group)
 	PARAM_AUDIO_WIDGET_CAP    = 9,
 	PARAM_SUPP_PCM_SIZE_RATE  = 10,
 	PARAM_SUPP_STREAM_FORMATS = 11,
@@ -103,6 +103,55 @@ enum
 	PARAM_OUTPUT_AMP_CAP      = 18,
 	PARAM_VOLUME_KNOB_CAP     = 19,
 };
+
+// Function group types
+enum
+{
+	FUNC_GRP_AUDIO = 1,
+	FUNC_GRP_MODEM = 2,
+	// 0x80-0xFF are vendor defined, everything else is reserved
+};
+
+// Widget types
+enum
+{
+	WIDGET_TYPE_AUDIO_OUTPUT   =  0,
+	WIDGET_TYPE_AUDIO_INPUT    =  1,
+	WIDGET_TYPE_AUDIO_MIXER    =  2,
+	WIDGET_TYPE_AUDIO_SELECTOR =  3,
+	WIDGET_TYPE_PIN_COMPLEX    =  4,
+	WIDGET_TYPE_POWER          =  5,
+	WIDGET_TYPE_VOLUME_KNOB    =  6,
+	WIDGET_TYPE_BEEP_GENERATOR =  7,
+	WIDGET_TYPE_VENDOR_DEFINED = 15,
+};
+
+// Fields for the response from PARAM_AUDIO_WIDGET_CAP
+#define WIDGET_CAP_INPUT_AMP          (1 << 1)
+#define WIDGET_CAP_OUTPUT_AMP         (1 << 2)
+#define WIDGET_CAP_AMP_PARAM_OVERRIDE (1 << 3)
+#define WIDGET_CAP_FMT_OVERRIDE       (1 << 4)
+#define WIDGET_CAP_STRIPE             (1 << 5)
+#define WIDGET_CAP_PROCESSOR          (1 << 6)
+#define WIDGET_CAP_UNSOLICITED        (1 << 7)
+#define WIDGET_CAP_CONN_LIST          (1 << 8)
+#define WIDGET_CAP_DIGITAL            (1 << 9)
+#define WIDGET_CAP_POWER_CNTRL        (1 << 10)
+#define WIDGET_CAP_LR_SWAP            (1 << 11)
+#define WIDGET_CAP_CHAN_COUNT(cap)        (1 + (((cap) & 1) | (((cap) >> 12) & 0xF)))
+#define WIDGET_CAP_TYPE(cap) (((cap) >> 20) & 0xF)
+
+// Fields for the response from PARAM_PIN_CAP
+#define PINCAP_PRESENCEDETECT (1 << 2)
+#define PINCAP_OUTPUT         (1 << 4)
+#define PINCAP_INPUT          (1 << 5)
+#define PINCAP_HDMI           (1 << 7)
+#define PINCAP_EAPD           (1 << 16)
+
+// Fields for VERB_GET_PIN_CONTROL/VERB_SET_PIN_CONTROL
+#define PIN_CONTROL_INPUT_ENABLE     (1 << 5)
+#define PIN_CONTROL_OUTPUT_ENABLE    (1 << 6)
+#define PIN_CONTROL_HEADPHONE_ENABLE (1 << 7)
 
 //------------------------------------------------------------------------------
 // HDA Registers

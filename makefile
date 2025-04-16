@@ -15,7 +15,7 @@ DISK_FILES = $(DRV_BIN) $(VXD_BIN) $(INF_FILE)
 default: install.img
 
 clean: .symbolic
-	rm *.obj *.drv *.vxd *.err *.map *.img fixlink
+	rm *.obj *.drv *.vxd *.err *.map *.img *.iso fixlink
 
 # Automatically delete target files if recipe commands fail
 .ERASE
