@@ -6,13 +6,14 @@
 
 MODULE_NAME = hdaudio
 
-DRV_BIN  = $(MODULE_NAME).drv
-VXD_BIN  = $(MODULE_NAME).vxd
-INF_FILE = $(MODULE_NAME).inf
+DRV_BIN    = $(MODULE_NAME).drv
+VXD_BIN    = $(MODULE_NAME).vxd
+INF_FILE   = $(MODULE_NAME).inf
+HDACTL_BIN = hdactl.exe
 
-DISK_FILES = $(DRV_BIN) $(VXD_BIN) $(INF_FILE) hdaudvxd.sym test/WDEB386.EXE
+DISK_FILES = $(DRV_BIN) $(VXD_BIN) $(INF_FILE) $(HDACTL_BIN)
 
-default: install.img
+default: install.img install.iso
 
 clean: .symbolic
 	rm *.obj *.drv *.vxd *.err *.map *.img *.iso *.sym *.lst fixlink
@@ -49,7 +50,7 @@ CFLAGS = -q -zastd=c99 -wx -wcd=303 -wcd=202 -s -bt=windows -d3 -fo=$@ $< $(INCL
 COMPILE32 = wcc386 $(CFLAGS)
 
 # Assemble 32-bit assembly code (for VxD)
-ASM32 = wasm -4 -mf -cx -fo=$@ $< $(DEFINES)
+ASM32 = wasm -zq -4 -mf -cx -fo=$@ $< $(DEFINES)
 
 # Compile 16-bit C code (for userspace driver DLL)
 COMPILE16 = wcc $(CFLAGS) -mc -zu -bd -zc
@@ -114,6 +115,21 @@ option map=$@.map
 export HDAUDIO_DDB.1
 <<
 	./fixlink -vxd32 $@
+
+#-------------------------------------------------------------------------------
+# User-mode tool
+#-------------------------------------------------------------------------------
+
+HDACTL_OBJS = hdactl.obj
+
+hdactl.obj : hdactl.c
+	wcc386 -q -bt=nt -zastd=c99 -I$(%WATCOM)/h -I$(%WATCOM)/h/nt -fo=$@ $<
+
+$(HDACTL_BIN) : $(HDACTL_OBJS)
+	wlink op quiet @<<$@.lnk
+sys nt
+file { $(HDACTL_OBJS) }
+<<
 
 #-------------------------------------------------------------------------------
 # Installation media

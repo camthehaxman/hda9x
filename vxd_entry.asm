@@ -32,7 +32,7 @@ VxD_Desc_Block STRUC
 VxD_Desc_Block ENDS
 
 
-EXTERN _hda_vxd_control_proc:NEAR
+EXTERN hda_vxd_control_proc_:NEAR
 EXTERN _hda_vxd_pm16_api_proc:NEAR
 
 
@@ -46,7 +46,7 @@ HDAUDIO_DDB VxD_Desc_Block <,,
 	,
 	"HDAUDIO ",                    ; Name
 	UNDEFINED_INIT_ORDER,          ; Initialization order
-	OFFSET MyVxD_Control,          ; Control procedure
+	OFFSET hda_vxd_control_proc_,  ; Control procedure
 	,                              ; V86 API procedure
 	OFFSET MyVxD_PM_Api,           ; 16-bit protected mode API procedure
 	,,,,>
@@ -68,30 +68,6 @@ MyVxD_PM_Api PROC
 	popad
 	ret
 MyVxD_PM_Api ENDP
-
-MyVxD_Control PROC PUBLIC
-	; Not sure which registers *need* to be saved, but we'll do it anyway
-	push ecx
-	push edx
-
-	;INVOKE hda_vxd_control_proc, eax, ebx, edx
-	push edx
-	push ebx
-	push eax
-	call _hda_vxd_control_proc
-	add esp, 12
-
-	; set carry flag on error
-	clc
-	test eax, eax
-	jnz noerror
-	stc
-noerror:
-
-	pop edx
-	pop ecx
-	ret
-MyVxD_Control ENDP
 
 _LTEXT ENDS
 

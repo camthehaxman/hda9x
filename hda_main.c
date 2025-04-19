@@ -2,14 +2,18 @@
 #include <string.h>
 #include <windows.h>
 #include <mmsystem.h>
+#include <nt/winerror.h>
+
 #include <vmm.h>
 #include <configmg.h>
 #include <mmdevldr.h>
-#include <vtd.h>
 #include <pci.h>
-#include <vpicd.h>
 #include <shell.h>
+#include <vpicd.h>
+#include <vtd.h>
+#include <vwin32.h>
 
+#include "tinyprintf.h"
 #include "hdaudio.h"
 #include "memory.h"
 #include "hda_vxd_api.h"
@@ -1177,6 +1181,80 @@ static CONFIGRET __cdecl driver_config_handler(CONFIGFUNC func, SUBCONFIGFUNC su
 	return CR_DEFAULT;
 }
 
+// Processes control codes sent by the DeviceIoControl Win32 function
+// Returns ERROR_SUCCESS on success, or an error code on failure.
+// An application can call GetLastError() to retrieve this error code.
+DWORD handle_win32_io(DIOCPARAMETERS *diocParams)
+{
+	DWORD *pBytesReturned = (DWORD *)diocParams->lpcbBytesReturned;
+	if (pBytesReturned != NULL)
+		*pBytesReturned = 0;
+	switch (diocParams->dwIoControlCode)
+	{
+	case DIOC_OPEN:
+		dprintf("DIOC_OPEN\n");
+		return ERROR_SUCCESS;
+	case DIOC_CLOSEHANDLE:
+		dprintf("DIOC_CLOSEHANDLE\n");
+		return ERROR_SUCCESS;
+	case HDA_VXD_EXEC_VERB:
+		dprintf("HDA_VXD_EXEC_VERB\n");
+		int count = diocParams->cbInBuffer / sizeof(uint32_t);
+		size_t retSize = count * sizeof(uint32_t);
+		if (diocParams->cbOutBuffer < retSize)
+			return ERROR_INSUFFICIENT_BUFFER;
+		if (!hda_run_commands((uint32_t *)diocParams->lpvInBuffer, (uint32_t *)diocParams->lpvOutBuffer, count))
+			return ERROR_GEN_FAILURE; 
+		if (pBytesReturned != NULL)
+			*pBytesReturned = retSize;
+		return ERROR_SUCCESS;
+	case HDA_VXD_GET_PCI_CONFIG:
+		dprintf("HDA_VXD_GET_PCI_CONFIG\n");
+		if (diocParams->cbOutBuffer < 256)
+			return ERROR_INSUFFICIENT_BUFFER;
+		CONFIGRET result = CM_Call_Enumerator_Function(
+			hdaDevNode,
+			PCI_ENUM_FUNC_GET_DEVICE_INFO,
+			0,
+			(void *)diocParams->lpvOutBuffer,
+			256,
+			0);
+		if (result != CR_SUCCESS)
+			return ERROR_GEN_FAILURE;
+		if (pBytesReturned != NULL)
+			*pBytesReturned = 256;
+		return ERROR_SUCCESS;
+	case HDA_VXD_GET_BASE_REGS:
+		dprintf("HDA_VXD_GET_BASE_REGS\n");
+		if (diocParams->cbOutBuffer < sizeof(struct HDARegs))
+			return ERROR_INSUFFICIENT_BUFFER;
+		memcpy((void *)diocParams->lpvOutBuffer, hdaRegs, sizeof(struct HDARegs));
+		if (pBytesReturned != NULL)
+			*pBytesReturned = sizeof(struct HDARegs);
+		return ERROR_SUCCESS;
+	default:
+		if (diocParams->dwIoControlCode >= HDA_VXD_GET_STREAM_DESC(0)
+		 && diocParams->dwIoControlCode <  HDA_VXD_GET_STREAM_DESC(HDA_MAX_STREAMS))
+		{
+			int index = diocParams->dwIoControlCode - HDA_VXD_GET_STREAM_DESC(0);
+			dprintf("HDA_VXD_GET_STREAM_DESC(%i)\n", index);
+			if (diocParams->cbOutBuffer < sizeof(struct HDAStreamDesc))
+				return ERROR_INSUFFICIENT_BUFFER;
+			memcpy((void *)diocParams->lpvOutBuffer, &hdaRegs->SDESC[index], sizeof(struct HDAStreamDesc));
+			if (pBytesReturned != NULL)
+				*pBytesReturned = sizeof(struct HDAStreamDesc);
+			return ERROR_SUCCESS;
+		}
+		else
+			return ERROR_NOT_SUPPORTED;
+	}
+
+	// invalid control code
+	dprintf("invalid Win32 control code 0x%X\n", diocParams->dwIoControlCode);
+	BKPT
+	return ERROR_NOT_SUPPORTED;
+}
+
 static const char *control_msg_name(DWORD msg)
 {
 	static char buf[32];
@@ -1201,6 +1279,7 @@ static const char *control_msg_name(DWORD msg)
 	X(KERNEL32_INITIALIZED)
 	X(CREATE_PROCESS)
 	X(DESTROY_PROCESS)
+	X(W32_DEVICEIOCONTROL)
 #undef X
 	default:
 		sprintf(buf, "(unknown 0x%X)", msg);
@@ -1209,14 +1288,17 @@ static const char *control_msg_name(DWORD msg)
 }
 
 // Handler for system control messages
-// Returns 0 on error
-DWORD __cdecl hda_vxd_control_proc(DWORD msg, DWORD paramEBX, DWORD paramEDX)
+// Return value is specific to the message
+// Carry flag is cleared on success, or set on error
+DWORD hda_vxd_control_proc(DWORD msg, DWORD paramEBX, DWORD paramEDX, DWORD paramESI)
 {
+	DWORD retVal = 0;
+
 	hda_debug_init();
-/*
+
 	dprintf("hda_vxd_control_proc(msg=%s, paramEBX=0x%X, paramEDX=0x%X)\n",
 		control_msg_name(msg), paramEBX, paramEDX);
-*/
+
 	switch (msg)
 	{
 	case PNP_NEW_DEVNODE:
@@ -1231,10 +1313,17 @@ DWORD __cdecl hda_vxd_control_proc(DWORD msg, DWORD paramEBX, DWORD paramEDX)
 				0);  // dwUserData
 		}
 		break;
+	case W32_DEVICEIOCONTROL:
+		retVal = handle_win32_io((DIOCPARAMETERS *)paramESI);
+		break;
 	}
 
-	return 1;
+	__asm clc  // clear carry flag
+	return retVal;
 }
+#pragma aux hda_vxd_control_proc \
+	__parm [eax] [ebx] [edx] [esi] \
+	__value [eax]
 
 void __cdecl hda_vxd_pm16_api_proc(HVM hVM, CLIENT_STRUCT *clientRegs)
 {

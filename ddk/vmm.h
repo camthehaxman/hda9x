@@ -210,6 +210,11 @@ typedef CRS *PCRS;
 #define SYS_POWER_DOWN          0x0036
 #define MAX_SYSTEM_CONTROL      0x0036
 
+// I/O control codes for the dwIoControlCode field of DIOCPARAMETERS
+#define DIOC_GETVERSION   0x0
+#define DIOC_OPEN         DIOC_GETVERSION
+#define DIOC_CLOSEHANDLE  -1
+
 //------------------------------------------------------------------------------
 // VMM services
 //------------------------------------------------------------------------------

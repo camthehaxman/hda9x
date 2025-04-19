@@ -23,6 +23,12 @@
 //   ES:SI - pointer to WAVEHDR
 #define HDA_VXD_SUBMIT_WAVE_BLOCK 4
 
+// Win32 API
+#define HDA_VXD_GET_PCI_CONFIG      5
+#define HDA_VXD_EXEC_VERB           6
+#define HDA_VXD_GET_BASE_REGS       7
+#define HDA_VXD_GET_STREAM_DESC(n)  (8 + (n))
+
 #ifndef __386__
 typedef void (FAR *VxDAPIEntry)(void);
 

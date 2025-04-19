@@ -1,5 +1,5 @@
 #!/bin/bash
 for f in *.obj
 do
-	wdis "$f" -s > "$(basename -s .obj "$f").lst"
+	wdis "$f" -s -l -p > "$(basename -s .obj "$f").lst"
 done

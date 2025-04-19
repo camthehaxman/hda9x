@@ -1,5 +1,6 @@
 #include <vmm.h>
 
+#include "tinyprintf.h"
 #include "hdaudio.h"
 #include "memory.h"
 

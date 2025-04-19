@@ -391,6 +391,9 @@ struct HDARegs
 	volatile uint32_t DPLBASE;      // DMA Position Buffer Lower Base
 	volatile uint32_t DPUBASE;      // DMA Position Buffer Upper Base
 	uint8_t reserved78[0x80-0x78];
+
+#define HDA_MAX_STREAMS (15 + 15 + 30)  // 15 output, 15 input, 30 bidirectional
+	// Stream descriptors - up to HDA_MAX_STREAMS of these exist
 	struct HDAStreamDesc SDESC[];
 };
 
@@ -477,8 +480,6 @@ BOOL hda_run_command(uint32_t command, uint32_t *response);
 //------------------------------------------------------------------------------
 // Debug
 //------------------------------------------------------------------------------
-
-#include "tinyprintf.h"
 
 #if DEBUG
 #define dprintf printf
