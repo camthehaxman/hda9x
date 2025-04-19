@@ -5,5 +5,6 @@
 *.lst
 *.map
 *.obj
+*.sym
 *.vxd
 fixlink

@@ -1,4 +1,4 @@
-// 16-bit userspace driver DLL (HDAUDIO.DRV) for High Definition Audio
+// 16-bit ring-3 driver DLL (HDAUDIO.DRV) for High Definition Audio
 
 #include <assert.h>
 #include <stdlib.h>
@@ -8,6 +8,7 @@
 #include <mmddk.h>
 
 #include "tinyprintf.h"
+#include "hda_vxd_api.h"
 
 // Attributes needed for a DLL export function.
 // These are FAR calls, and the DS segment register must be loaded upon
@@ -21,7 +22,11 @@
 #define dprintf(...)
 #endif
 
+// debugger breakpoint
+#define BKPT __asm int 3
+
 static BOOL tprintfInitialized = FALSE;
+static VxDAPIEntry vxdEntry = NULL;
 
 // Prints a single character to the COM serial port
 // Used by tinyprintf
@@ -96,6 +101,14 @@ DWORD DLL_EXPORT DriverProc(DWORD dwDriverID, HANDLE hDriver,
 		// Sent to the driver when it is loaded. This will always be the first
 		// message received.
 		// Return non-zero for success.
+		vxdEntry = hda_vxd_get_entry_point();
+		if (vxdEntry == NULL)
+		{
+			dprintf("Failed to get VxD entry point\n");
+			BKPT
+			return 0;
+		}
+		dprintf("VxD API entry point: 0x%08lX\n", vxdEntry);
 		return 1;
 	case DRV_FREE:
 		// Sent to the driver when it is about to be discarded. This will always
@@ -141,7 +154,7 @@ DWORD DLL_EXPORT DriverProc(DWORD dwDriverID, HANDLE hDriver,
 	return DefDriverProc(dwDriverID, hDriver, wMessage, dwParam1, dwParam2);
 }
 
-static const int numDevs = 5;
+static const int numDevs = 1;
 static const int maxClients = 1;
 static const int maxChannels = 2;
 
@@ -162,9 +175,9 @@ static void do_driver_callback(struct ClientInfo *client, WORD msg, DWORD dwPara
 	HANDLE hDevice    = wavOpen->hWave;
 	UINT   uMessage   = msg;
 	DWORD  dwUser     = wavOpen->dwInstance;
-	//DWORD  dwParam1   = 0;
 	DWORD  dwParam2   = 0;
 
+	dprintf("do_driver_callback: wavOpen=0x%lX\n", wavOpen);
 	dprintf("DriverCallback(0x%08lX, %u, 0x%X, %u, 0x%08lX, 0x%08lX, 0x%08lX)\n",
 		dwCallback, uFlags, hDevice, uMessage, dwUser, dwParam1, dwParam2);
 
@@ -184,24 +197,15 @@ static void do_driver_callback(struct ClientInfo *client, WORD msg, DWORD dwPara
 		dwParam2);
 }
 
-void DLL_EXPORT wave_block_finished(WAVEHDR FAR *wavHdr)
+DWORD DLL_EXPORT wave_block_finished(WAVEHDR FAR *wavHdr)
 {
 	wavHdr->dwFlags |= WHDR_DONE;
 	wavHdr->dwFlags &= ~WHDR_INQUEUE;
 
-	// TODO: should this be a FAR pointer?
-	struct ClientInfo *client = (struct ClientInfo *)wavHdr->reserved;
-	dprintf("wave_block_finished: client 0x%lX\n", client);
+	struct ClientInfo FAR *client = (struct ClientInfo FAR *)wavHdr->reserved;
+	dprintf("wave_block_finished: wavHdr 0x%lX, client 0x%lX\n", wavHdr, client);
 	do_driver_callback(client, WOM_DONE, (DWORD)wavHdr);
-}
-
-static void write_wave_data(WAVEHDR *wavHdr)
-{
-	dprintf("write_wave_data\n");
-
-	// TODO: send this to the VxD. The VxD will then call wave_block_finished
-	// when it is done with the wave block
-	wave_block_finished(wavHdr);
+	return 1;
 }
 
 static const char *wod_message_name(WORD msg)
@@ -287,6 +291,7 @@ DWORD DLL_EXPORT wodMessage(UINT uDeviceID, WORD uMsg, DWORD dwUser, DWORD dwPar
 		if (uDeviceID >= numDevs)
 		{
 			dprintf("bad device ID %u\n", uDeviceID);
+			BKPT
 			return MMSYSERR_BADDEVICEID;
 		}
 		MDEVICECAPSEX FAR *caps = (MDEVICECAPSEX FAR *)dwParam1;
@@ -294,19 +299,10 @@ DWORD DLL_EXPORT wodMessage(UINT uDeviceID, WORD uMsg, DWORD dwUser, DWORD dwPar
 		if (caps->cbSize < sizeof(*wc))
 		{
 			dprintf("struct size too small\n");
+			BKPT
 			return MMSYSERR_INVALPARAM;
 		}
-		// TODO: query this info from the VxD
-		wc->wMid = 0x8086;
-		wc->wPid = 0xA2F0;
-		wc->vDriverVersion = (DRV_VER_MAJOR << 8) | DRV_VER_MINOR;
-		sprintf(wc->szPname, "HD Audio Device %u", uDeviceID);
-		wc->dwFormats = WAVE_FORMAT_1M08 | WAVE_FORMAT_1M16 | WAVE_FORMAT_1S08 | WAVE_FORMAT_1S16
-					  | WAVE_FORMAT_2M08 | WAVE_FORMAT_2M16 | WAVE_FORMAT_2S08 | WAVE_FORMAT_2S16
-					  | WAVE_FORMAT_4M08 | WAVE_FORMAT_4M16 | WAVE_FORMAT_4S08 | WAVE_FORMAT_4S16
-					  /*| WAVE_FORMAT_96M08 | WAVE_FORMAT_96M16 | WAVE_FORMAT_96S08 | WAVE_FORMAT_96S16*/;
-		wc->wChannels = maxChannels;
-		wc->dwSupport = WAVECAPS_LRVOLUME|WAVECAPS_VOLUME/*|WAVECAPS_SAMPLEACCURATE*/;
+		hda_vxd_get_capabilities(vxdEntry, wc);
 		return MMSYSERR_NOERROR;
 	case WODM_OPEN:
 		// Sent to allocate a device for use by a client application
@@ -316,18 +312,21 @@ DWORD DLL_EXPORT wodMessage(UINT uDeviceID, WORD uMsg, DWORD dwUser, DWORD dwPar
 		if (uDeviceID >= numDevs)
 		{
 			dprintf("bad device ID %u\n", uDeviceID);
+			BKPT
 			return MMSYSERR_BADDEVICEID;
 		}
-		const WAVEOPENDESC FAR *wavOpen = (WAVEOPENDESC FAR *)dwParam1;
-		const PCMWAVEFORMAT FAR *lpFormat = (PCMWAVEFORMAT FAR *)wavOpen->lpFormat;
+		const WAVEOPENDESC FAR *wavOpen = (const WAVEOPENDESC FAR *)dwParam1;
+		const PCMWAVEFORMAT FAR *lpFormat = (const PCMWAVEFORMAT FAR *)wavOpen->lpFormat;
 		if (lpFormat->wf.wFormatTag != WAVE_FORMAT_PCM)
 		{
 			dprintf("format %u not supported\n", lpFormat->wf.wFormatTag);
+			BKPT
 			return WAVERR_BADFORMAT;
 		}
 		if (lpFormat->wf.nChannels > maxChannels)
 		{
 			dprintf("too many channels %i\n", lpFormat->wf.nChannels);
+			BKPT
 			return WAVERR_BADFORMAT;
 		}
 		switch (lpFormat->wBitsPerSample)
@@ -341,32 +340,37 @@ DWORD DLL_EXPORT wodMessage(UINT uDeviceID, WORD uMsg, DWORD dwUser, DWORD dwPar
 			break;
 		default:
 			dprintf("%u bits per sample not supported\n", lpFormat->wBitsPerSample);
+			BKPT
 			return WAVERR_BADFORMAT;
 		}
 		if (!(dwParam2 & WAVE_FORMAT_QUERY))
 		{
-			// Save the client info for when we need to call DriverCallback later
-			client = malloc(sizeof(*client));
+			// GlobalAlloc returns a selector, not an actual pointer, so we
+			// use the MAKELONG macro to convert it into a far pointer
+			client = (struct ClientInfo FAR *)MAKELONG(0, GlobalAlloc(GPTR, sizeof(*client)));
+			//dprintf("client 0x%08lX\n", client);
 			if (client == NULL)
 			{
 				dprintf("failed to allocate memory\n");
+				BKPT
 				return MMSYSERR_NOMEM;
 			}
 			client->wavOpen = *wavOpen;
 			client->dwFlags = dwParam2;
-			// stuff it into dwUser so that we can retrieve it later during WODM_WRITE
+			// Save it into dwUser so that we can retrieve it later during WODM_WRITE
 			*(FPClientInfo FAR *)dwUser = client;
-//			dprintf("stored userdata 0x%lX\n", *(FPClientInfo FAR *)dwUser);
+			hda_vxd_open_stream(vxdEntry, lpFormat);
 			do_driver_callback(client, WOM_OPEN, 0);
-			dprintf("device opened\n");
+			dprintf("device opened!\n");
 		}
 		return MMSYSERR_NOERROR;
 	case WODM_CLOSE:
 		// Sent to deallocate a specified device
 		// If there are buffers still playing, return WAVERR_STILLPLAYING
+		hda_vxd_close_stream(vxdEntry);
 		client = (struct ClientInfo FAR *)dwUser;
 		do_driver_callback(client, WOM_CLOSE, 0);
-		free(client);
+		GlobalFree(HIWORD(client));
 		dprintf("device closed\n");
 		return MMSYSERR_NOERROR;
 	case WODM_WRITE:
@@ -378,21 +382,23 @@ DWORD DLL_EXPORT wodMessage(UINT uDeviceID, WORD uMsg, DWORD dwUser, DWORD dwPar
 		if (dwParam2 < sizeof(*wavHdr))
 		{
 			dprintf("struct size too small\n");
+			BKPT
 			return MMSYSERR_INVALPARAM;
 		}
 		if (!(wavHdr->dwFlags & WHDR_PREPARED))
 		{
 			dprintf("wave header not prepared\n");
+			BKPT
 			return WAVERR_UNPREPARED;
 		}
 		wavHdr->dwFlags &= ~WHDR_DONE;
 		wavHdr->dwFlags |= WHDR_INQUEUE;
 		client = (struct ClientInfo FAR *)dwUser;
-//		dprintf("retrieved userdata 0x%lX\n", client);
+		dprintf("WODM_WRITE wavHdr 0x%lX, client 0x%lX\n", wavHdr, client);
 		// We can now store the client info in the "reserved" field of the WAVEHDR.
 		// The MSSNDSYS DDK example does that, so it's okay.
 		wavHdr->reserved = (DWORD)client;
-		write_wave_data(wavHdr);
+		hda_vxd_submit_wave_block(vxdEntry, wavHdr);
 		return MMSYSERR_NOERROR;
 	}
 

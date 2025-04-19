@@ -10,20 +10,20 @@ typedef ULONG HVM;
 
 struct Client_Reg_Struc
 {
-	ULONG Client_EDI;
-	ULONG Client_ESI;
-	ULONG Client_EBP;
-	ULONG Client_res0;
-	ULONG Client_EBX;
-	ULONG Client_EDX;
-	ULONG Client_ECX;
-	ULONG Client_EAX;
-	ULONG Client_Error;
-	ULONG Client_EIP;
+	ULONG  Client_EDI;
+	ULONG  Client_ESI;
+	ULONG  Client_EBP;
+	ULONG  Client_res0;
+	ULONG  Client_EBX;
+	ULONG  Client_EDX;
+	ULONG  Client_ECX;
+	ULONG  Client_EAX;
+	ULONG  Client_Error;
+	ULONG  Client_EIP;
 	USHORT Client_CS;
 	USHORT Client_res1;
-	ULONG Client_EFlags;
-	ULONG Client_ESP;
+	ULONG  Client_EFlags;
+	ULONG  Client_ESP;
 	USHORT Client_SS;
 	USHORT Client_res2;
 	USHORT Client_ES;
@@ -34,11 +34,11 @@ struct Client_Reg_Struc
 	USHORT Client_res5;
 	USHORT Client_GS;
 	USHORT Client_res6;
-	ULONG Client_Alt_EIP;
+	ULONG  Client_Alt_EIP;
 	USHORT Client_Alt_CS;
 	USHORT Client_res7;
-	ULONG Client_Alt_EFlags;
-	ULONG Client_Alt_ESP;
+	ULONG  Client_Alt_EFlags;
+	ULONG  Client_Alt_ESP;
 	USHORT Client_Alt_SS;
 	USHORT Client_res8;
 	USHORT Client_Alt_ES;
@@ -59,7 +59,7 @@ struct Client_Word_Reg_Struc
 	USHORT Client_res14;
 	USHORT Client_BP;
 	USHORT Client_res15;
-	ULONG Client_res16;
+	ULONG  Client_res16;
 	USHORT Client_BX;
 	USHORT Client_res17;
 	USHORT Client_DX;
@@ -68,18 +68,18 @@ struct Client_Word_Reg_Struc
 	USHORT Client_res19;
 	USHORT Client_AX;
 	USHORT Client_res20;
-	ULONG Client_res21;
+	ULONG  Client_res21;
 	USHORT Client_IP;
 	USHORT Client_res22;
-	ULONG Client_res23;
+	ULONG  Client_res23;
 	USHORT Client_Flags;
 	USHORT Client_res24;
 	USHORT Client_SP;
 	USHORT Client_res25;
-	ULONG Client_res26[5];
+	ULONG  Client_res26[5];
 	USHORT Client_Alt_IP;
 	USHORT Client_res27;
-	ULONG Client_res28;
+	ULONG  Client_res28;
 	USHORT Client_Alt_Flags;
 	USHORT Client_res29;
 	USHORT Client_Alt_SP;
@@ -87,18 +87,18 @@ struct Client_Word_Reg_Struc
 
 struct Client_Byte_Reg_Struc
 {
-	ULONG Client_res30[4];
-	UCHAR Client_BL;
-	UCHAR Client_BH;
+	ULONG  Client_res30[4];
+	UCHAR  Client_BL;
+	UCHAR  Client_BH;
 	USHORT Client_res31;
-	UCHAR Client_DL;
-	UCHAR Client_DH;
+	UCHAR  Client_DL;
+	UCHAR  Client_DH;
 	USHORT Client_res32;
-	UCHAR Client_CL;
-	UCHAR Client_CH;
+	UCHAR  Client_CL;
+	UCHAR  Client_CH;
 	USHORT Client_res33;
-	UCHAR Client_AL;
-	UCHAR Client_AH;
+	UCHAR  Client_AL;
+	UCHAR  Client_AH;
 };
 
 typedef union tagCLIENT_STRUC
@@ -321,16 +321,29 @@ typedef CRS *PCRS;
 // auxiliary pragma to specify which arguments are in registers, which registers
 // are clobbered, and which registers contain the return value.
 
-#define SVC_Get_VMM_Version   VXD_SERVICE(VMM_DEVICE_ID,   0)
-#define SVC_Get_Cur_VM_Handle VXD_SERVICE(VMM_DEVICE_ID,   1)
-#define SVC_Map_Flat          VXD_SERVICE(VMM_DEVICE_ID,  28)
-#define SVC__HeapAllocate     VXD_SERVICE(VMM_DEVICE_ID,  79)
-#define SVC__HeapReAllocate   VXD_SERVICE(VMM_DEVICE_ID,  80)
-#define SVC__HeapFree         VXD_SERVICE(VMM_DEVICE_ID,  81)
-#define SVC__PageAllocate     VXD_SERVICE(VMM_DEVICE_ID,  83)
-#define SVC__MapPhysToLinear  VXD_SERVICE(VMM_DEVICE_ID, 108)
-#define SVC_Out_Debug_String  VXD_SERVICE(VMM_DEVICE_ID, 194)
-#define SVC_Out_Debug_Chr     VXD_SERVICE(VMM_DEVICE_ID, 195)
+#define SVC_Get_VMM_Version     VXD_SERVICE(VMM_DEVICE_ID,   0)
+#define SVC_Get_Cur_VM_Handle   VXD_SERVICE(VMM_DEVICE_ID,   1)
+#define SVC_Map_Flat            VXD_SERVICE(VMM_DEVICE_ID,  28)
+#define SVC__HeapAllocate       VXD_SERVICE(VMM_DEVICE_ID,  79)
+#define SVC__HeapReAllocate     VXD_SERVICE(VMM_DEVICE_ID,  80)
+#define SVC__HeapFree           VXD_SERVICE(VMM_DEVICE_ID,  81)
+#define SVC__PageAllocate       VXD_SERVICE(VMM_DEVICE_ID,  83)
+#define SVC__MapPhysToLinear    VXD_SERVICE(VMM_DEVICE_ID, 108)
+#define SVC_Fatal_Error_Handler VXD_SERVICE(VMM_DEVICE_ID, 190)
+#define SVC_Out_Debug_String    VXD_SERVICE(VMM_DEVICE_ID, 194)
+#define SVC_Out_Debug_Chr       VXD_SERVICE(VMM_DEVICE_ID, 195)
+
+static PVOID __declspec(naked)
+Map_Flat(unsigned char segOffset, unsigned char offOfset)
+{
+	// ah - segOffset
+	// al - offOffset
+	__asm mov ah, bl
+	VxDJmp(SVC_Map_Flat)
+}
+#pragma aux Map_Flat \
+	__parm [ebx] [eax] \
+	__value [eax]
 
 static PVOID __declspec(naked) __cdecl
 _HeapAllocate(ULONG nBytes, ULONG flags)
@@ -355,6 +368,16 @@ _MapPhysToLinear(ULONG PhysAddr, ULONG nBytes, ULONG flags)
 {
 	VxDJmp(SVC__MapPhysToLinear)
 }
+
+#define EF_Hang_On_Exit 1
+
+static VOID __declspec(naked)
+Fatal_Error_Handler(PCHAR pszMessage, DWORD dwExitFlag)
+{
+	VxDJmp(SVC_Fatal_Error_Handler)
+}
+#pragma aux Fatal_Error_Handler \
+	__parm [esi] [eax]
 
 static VOID __declspec(naked)
 Out_Debug_String(const char *s)

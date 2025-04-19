@@ -10,15 +10,19 @@ DRV_BIN  = $(MODULE_NAME).drv
 VXD_BIN  = $(MODULE_NAME).vxd
 INF_FILE = $(MODULE_NAME).inf
 
-DISK_FILES = $(DRV_BIN) $(VXD_BIN) $(INF_FILE)
+DISK_FILES = $(DRV_BIN) $(VXD_BIN) $(INF_FILE) hdaudvxd.sym test/WDEB386.EXE
 
 default: install.img
 
 clean: .symbolic
-	rm *.obj *.drv *.vxd *.err *.map *.img *.iso fixlink
+	rm *.obj *.drv *.vxd *.err *.map *.img *.iso *.sym *.lst fixlink
 
 # Automatically delete target files if recipe commands fail
 .ERASE
+
+hdaudvxd.sym : hdaudio.vxd.map
+	python3 watcom2msmap.py hdaudio < $< > $@.map
+	wine ddk/MAPSYM.EXE -o $@ $@.map
 
 #-------------------------------------------------------------------------------
 # Compiler options
@@ -75,6 +79,7 @@ option description 'wave:High Definition Audio Driver'
 export WEP.1
 export DriverProc.2
 export wodMessage.3
+export wave_block_finished
 <<
 
 #-------------------------------------------------------------------------------

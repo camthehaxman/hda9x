@@ -10,6 +10,8 @@
 #define	DLVXD_LOAD_DRIVER     2  // We loaded DLVxD as a device driver.
 #define	NUM_DLVXD_LOAD_TYPE   3  // Number of DLVxD load type.
 
+typedef	VOID *PFARVOID; // Pointer to a VOID.
+
 typedef DWORD CONFIGRET;
 
 // CONFIGRET values
@@ -139,6 +141,8 @@ typedef struct Config_Buff_s
 	BYTE  bReserved1[3];                  // Reserved
 } CMCONFIG, *PCMCONFIG;
 
+typedef	ULONG ENUMFUNC;
+
 //------------------------------------------------------------------------------
 // VxD services
 //------------------------------------------------------------------------------
@@ -157,10 +161,16 @@ typedef struct Config_Buff_s
 #define	CM_GET_ALLOC_LOG_CONF_BOOT_ALLOC 0x00000001
 #define	CM_GET_ALLOC_LOG_CONF_BITS       0x00000001
 
-CONFIGRET __declspec(naked) __cdecl
+static CONFIGRET __declspec(naked) __cdecl
 CM_Get_Alloc_Log_Conf(PCMCONFIG pccBuffer, DEVNODE dnDevNode, ULONG ulFlags)
 {
 	VxDJmp(SVC_CM_Get_Alloc_Log_Conf)
+}
+
+static CONFIGRET __declspec(naked) __cdecl
+CM_Call_Enumerator_Function(DEVNODE dnDevNode, ENUMFUNC efFunc, ULONG ulRefData, PFARVOID pBuffer, ULONG ulBufferSize, ULONG ulFlags)
+{
+	VxDJmp(SVC_CM_Call_Enumerator_Function)
 }
 
 #pragma pack(pop)

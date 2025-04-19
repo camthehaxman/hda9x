@@ -8,6 +8,9 @@
 // Macros
 //------------------------------------------------------------------------------
 
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define ARRAY_COUNT(arr) (sizeof(arr) / sizeof(arr[0]))
 // Extracts numBits bits starting at startBit
 #define GET_BITS(reg, startBit, numBits) (((reg) >> startBit) & ((1 << numBits) - 1))
 
@@ -89,8 +92,8 @@ enum
 	PARAM_VENDOR_ID           = 0,
 	PARAM_REVISION_ID         = 2,
 	PARAM_SUB_NODE_COUNT      = 4,
-	PARAM_FUNC_GRP_TYPE        = 5,  // see section 7.3.4.4 (applies to function groups)
-	PARAM_AUDIO_FUNC_GRP_CAP   = 8,  // see section 7.3.4.5 (applies to audio function group)
+	PARAM_FUNC_GRP_TYPE       = 5,  // see section 7.3.4.4 (applies to function groups)
+	PARAM_AUDIO_FUNC_GRP_CAP  = 8,  // see section 7.3.4.5 (applies to audio function group)
 	PARAM_AUDIO_WIDGET_CAP    = 9,
 	PARAM_SUPP_PCM_SIZE_RATE  = 10,
 	PARAM_SUPP_STREAM_FORMATS = 11,
@@ -126,7 +129,7 @@ enum
 	WIDGET_TYPE_VENDOR_DEFINED = 15,
 };
 
-// Fields for the response from PARAM_AUDIO_WIDGET_CAP
+// Fields for the PARAM_AUDIO_WIDGET_CAP parameter
 #define WIDGET_CAP_INPUT_AMP          (1 << 1)
 #define WIDGET_CAP_OUTPUT_AMP         (1 << 2)
 #define WIDGET_CAP_AMP_PARAM_OVERRIDE (1 << 3)
@@ -141,7 +144,26 @@ enum
 #define WIDGET_CAP_CHAN_COUNT(cap)        (1 + (((cap) & 1) | (((cap) >> 12) & 0xF)))
 #define WIDGET_CAP_TYPE(cap) (((cap) >> 20) & 0xF)
 
-// Fields for the response from PARAM_PIN_CAP
+// Fields for the PARAM_SUPP_PCM_SIZE_RATE parameter
+#define PCM_SUPP_8BIT  (1 << 16)
+#define PCM_SUPP_16BIT (1 << 17)
+#define PCM_SUPP_20BIT (1 << 18)
+#define PCM_SUPP_24BIT (1 << 19)
+#define PCM_SUPP_32BIT (1 << 20)
+#define PCM_SUPP_8000HZ   (1 << 0)
+#define PCM_SUPP_11025HZ  (1 << 1)
+#define PCM_SUPP_16000HZ  (1 << 2)
+#define PCM_SUPP_22050HZ  (1 << 3)
+#define PCM_SUPP_32000HZ  (1 << 4)
+#define PCM_SUPP_44100HZ  (1 << 5)
+#define PCM_SUPP_48000HZ  (1 << 6)
+#define PCM_SUPP_88200HZ  (1 << 7)
+#define PCM_SUPP_96000HZ  (1 << 8)
+#define PCM_SUPP_176400HZ (1 << 9)
+#define PCM_SUPP_192000HZ (1 << 10)
+#define PCM_SUPP_384000HZ (1 << 11)
+
+// Fields for the PARAM_PIN_CAP parameter
 #define PINCAP_PRESENCEDETECT (1 << 2)
 #define PINCAP_OUTPUT         (1 << 4)
 #define PINCAP_INPUT          (1 << 5)
@@ -413,6 +435,45 @@ CHECK_REG(0x74, 0x77, DPUBASE)
 
 extern struct HDARegs *hdaRegs;
 
+typedef uint16_t nodeid_t;
+
+#define MAX_CONNECTIONS 16
+
+struct HDAWidget
+{
+	nodeid_t nodeID;
+	uint8_t type;
+	uint8_t connectionsCount;
+	nodeid_t connections[MAX_CONNECTIONS];  // list of possible inputs to this widget
+	nodeid_t outPath;  // next node in path to "Audio Output" widget, or 0 if none
+	uint32_t caps;
+	// specific to Pin Complex
+	uint32_t pinCaps;
+	// specific to Audio Output / Audio Input
+	uint8_t streamTag;
+};
+
+struct HDAAudioFuncGroup
+{
+	nodeid_t nodeID;
+	uint8_t widgetsStart;  // starting node ID of child widgets
+	uint8_t widgetsCount;  // number of child widgets
+	struct HDAWidget *widgets;
+};
+
+struct HDACodec
+{
+	uint8_t addr;
+	uint8_t childStart;
+	uint8_t childCount;
+	// We only support a single audio function group. While the standard doesn't
+	// forbid there being multiple, this would be unusual.
+	struct HDAAudioFuncGroup afg;
+};
+
+BOOL hda_run_commands(const uint32_t *commands, uint32_t *responses, unsigned int count);
+BOOL hda_run_command(uint32_t command, uint32_t *response);
+
 //------------------------------------------------------------------------------
 // Debug
 //------------------------------------------------------------------------------
@@ -432,4 +493,6 @@ extern struct HDARegs *hdaRegs;
 #endif
 
 void hda_debug_init(void);
+void hda_debug_dump_regs(void);
+void hda_debug_dump_codec(struct HDACodec *codec);
 void hda_debug_assert_fail(const char *expr, const char *file, int line);
