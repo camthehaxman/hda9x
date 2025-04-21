@@ -16,7 +16,7 @@ DISK_FILES = $(DRV_BIN) $(VXD_BIN) $(INF_FILE) $(HDACTL_BIN)
 default: install.img install.iso
 
 clean: .symbolic
-	rm *.obj *.drv *.vxd *.err *.map *.img *.iso *.sym *.lst fixlink
+	rm *.obj *.drv *.vxd *.err *.map *.img *.iso *.sym *.lst *.exe fixlink
 
 # Automatically delete target files if recipe commands fail
 .ERASE
@@ -123,7 +123,7 @@ export HDAUDIO_DDB.1
 HDACTL_OBJS = hdactl.obj
 
 hdactl.obj : hdactl.c
-	wcc386 -q -bt=nt -zastd=c99 -I$(%WATCOM)/h -I$(%WATCOM)/h/nt -fo=$@ $<
+	wcc386 -q -bt=nt -zastd=c99 -wx -I$(%WATCOM)/h -I$(%WATCOM)/h/nt -fo=$@ $<
 
 $(HDACTL_BIN) : $(HDACTL_OBJS)
 	wlink op quiet @<<$@.lnk

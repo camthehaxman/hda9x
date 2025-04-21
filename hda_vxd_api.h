@@ -26,8 +26,9 @@
 // Win32 API
 #define HDA_VXD_GET_PCI_CONFIG      5
 #define HDA_VXD_EXEC_VERB           6
-#define HDA_VXD_GET_BASE_REGS       7
-#define HDA_VXD_GET_STREAM_DESC(n)  (8 + (n))
+#define HDA_VXD_GET_CODECS          7
+#define HDA_VXD_GET_BASE_REGS       8
+#define HDA_VXD_GET_STREAM_DESC(n)  (9 + (n))
 
 #ifndef __386__
 typedef void (FAR *VxDAPIEntry)(void);

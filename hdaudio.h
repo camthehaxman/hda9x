@@ -27,7 +27,13 @@ enum
 	VERB_SET_CONVERTER_FORMAT = 0x200,
 
 	VERB_GET_AMP_GAIN_MUTE   = 0xB00,
+#define GET_AMP_GAIN_MUTE_RIGHT  (0 << 13)
+#define GET_AMP_GAIN_MUTE_LEFT   (1 << 13)
+#define GET_AMP_GAIN_MUTE_INPUT  (0 << 15)
+#define GET_AMP_GAIN_MUTE_OUTPUT (1 << 15) 
 	VERB_SET_AMP_GAIN_MUTE   = 0x300,
+#define AMP_GAIN_MUTE_GAIN(resp) GET_BITS(resp, 0, 7)
+#define AMP_GAIN_MUTE_MUTE       (1 << 7)
 
 	VERB_GET_PARAMETER     = 0xF00,
 
@@ -47,6 +53,8 @@ enum
 
 	VERB_GET_CONVERTER_STREAM_CHANNEL = 0xF06,
 	VERB_SET_CONVERTER_STREAM_CHANNEL = 0x706,
+#define CONVERTER_STREAM_CHANNEL_CHANNEL(resp) GET_BITS(resp, 0, 4)
+#define CONVERTER_STREAM_CHANNEL_STREAM(resp)  GET_BITS(resp, 4, 4)
 
 	VERB_GET_PIN_CONTROL    = 0xF07,
 	VERB_SET_PIN_CONTROL    = 0x707,
@@ -78,6 +86,14 @@ enum
 	VERB_SET_CONFIG_DEFAULT1 = 0x71D,
 	VERB_SET_CONFIG_DEFAULT2 = 0x71E,
 	VERB_SET_CONFIG_DEFAULT3 = 0x71F,
+#define CONFIG_DEFAULT_SEQUENCE(resp)          GET_BITS(resp,  0, 4)
+#define CONFIG_DEFAULT_DEF_ASSOC(resp)         GET_BITS(resp,  4, 4)
+#define CONFIG_DEFAULT_MISC(resp)              GET_BITS(resp,  8, 4)
+#define CONFIG_DEFAULT_COLOR(resp)             GET_BITS(resp, 12, 4)
+#define CONFIG_DEFAULT_CONN_TYPE(resp)         GET_BITS(resp, 16, 4)
+#define CONFIG_DEFAULT_DEF_DEVICE(resp)        GET_BITS(resp, 20, 4)
+#define CONFIG_DEFAULT_DEF_LOCATION(resp)      GET_BITS(resp, 24, 6)
+#define CONFIG_DEFAULT_PORT_CONNECTIVITY(resp) GET_BITS(resp, 30, 2)
 
 	VERB_GET_CONV_CHAN_COUNT = 0xF2D,
 	VERB_SET_CONV_CHAN_COUNT = 0x72D,
@@ -90,20 +106,44 @@ enum
 enum
 {
 	PARAM_VENDOR_ID           = 0,
+#define VENDOR_ID_DEV_ID(resp)  GET_BITS(resp,  0, 16)
+#define VENDOR_ID_VEND_ID(resp) GET_BITS(resp, 16, 16)
+
 	PARAM_REVISION_ID         = 2,
+#define REVISION_ID_STEP_ID(resp) GET_BITS(resp,  0, 8)
+#define REVISION_ID_REV_ID(resp)  GET_BITS(resp,  8, 8)
+#define REVISION_ID_MIN_REV(resp) GET_BITS(resp, 16, 4)
+#define REVISION_ID_MAJ_REV(resp) GET_BITS(resp, 20, 4)
+
 	PARAM_SUB_NODE_COUNT      = 4,
+#define SUB_NODE_COUNT_NUM_NODES(resp)  GET_BITS(resp,  0, 8)
+#define SUB_NODE_COUNT_START_NODE(resp) GET_BITS(resp, 16, 8)
+
 	PARAM_FUNC_GRP_TYPE       = 5,  // see section 7.3.4.4 (applies to function groups)
+#define FUNC_GRP_TYPE_NODE_TYPE(resp) GET_BITS(resp, 0, 8)
+#define FUNC_GRP_TYPE_UNSOL_CAPABLE   (1 << 8)
+
 	PARAM_AUDIO_FUNC_GRP_CAP  = 8,  // see section 7.3.4.5 (applies to audio function group)
 	PARAM_AUDIO_WIDGET_CAP    = 9,
+#define AUDIO_WIDGET_CAP_DELAY(resp) GET_BITS(resp, 16, 4)
+#define AUDIO_WIDGET_CAP_TYPE(resp)  GET_BITS(resp, 20, 4)
+#define AUDIO_WIDGET_CAP_CHANS(resp) (1 + ((resp) & 1) + GET_BITS(resp, 13, 3))
+
 	PARAM_SUPP_PCM_SIZE_RATE  = 10,
 	PARAM_SUPP_STREAM_FORMATS = 11,
 	PARAM_PIN_CAP             = 12,
+
 	PARAM_INPUT_AMP_CAP       = 13,
+	PARAM_OUTPUT_AMP_CAP      = 18,
+#define AMP_CAP_OFFSET(resp)    GET_BITS(resp, 0, 7)
+#define AMP_CAP_NUM_STEPS(resp) GET_BITS(resp, 8, 7)
+#define AMP_CAP_STEP_SIZE(resp) GET_BITS(resp, 16, 7)
+#define AMP_CAP_MUTE_CAPABLE    (1 << 31)
+
 	PARAM_CONN_LIST_LENGTH    = 14,
 	PARAM_SUPP_POWER_STATES   = 15,
 	PARAM_PROCESSING_CAP      = 16,
 	PARAM_GPIO_COUNT          = 17,
-	PARAM_OUTPUT_AMP_CAP      = 18,
 	PARAM_VOLUME_KNOB_CAP     = 19,
 };
 

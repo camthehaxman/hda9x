@@ -543,7 +543,7 @@ static BOOL hda_func_group_init(struct HDACodec *codec, struct HDAAudioFuncGroup
 			hda_run_commands(commands, responses, 1);
 			BOOL longForm = (responses[0] & (1 << 7)) != 0;
 			widget->connectionsCount = responses[0] & 0x3F;
-			int entriesPerResp = longForm ? 2 : 4;
+			int perSet = longForm ? 2 : 4;  // long form returns two 16-bit entries per set, while short form returns four 8-bit entries per set
 
 			if (widget->connectionsCount > MAX_CONNECTIONS)
 			{
@@ -554,10 +554,9 @@ static BOOL hda_func_group_init(struct HDACodec *codec, struct HDAAudioFuncGroup
 			dprintf("    ");
 			for (int i = 0; i < widget->connectionsCount; i++)
 			{
-				int index = i % entriesPerResp;
-				if (index == 0)
+				int index = i % perSet;
+				if (index == 0)  // fetch the next set of entries
 				{
-					// fetch the next set of entries
 					commands[0] = MAKE_COMMAND(codec->addr, nodeID, VERB_GET_CONNECTION_LIST_ENTRY, i - index);
 					hda_run_commands(commands, responses, 1);
 				}
@@ -599,7 +598,7 @@ static BOOL hda_func_group_init(struct HDACodec *codec, struct HDAAudioFuncGroup
 				ASSERT(w->type == WIDGET_TYPE_AUDIO_OUTPUT);
 				// set stream tag
 				w->streamTag = OUTPUT_STREAM_TAG;
-				commands[0] = MAKE_COMMAND(codec->addr, widget->nodeID, VERB_SET_CONVERTER_STREAM_CHANNEL, (widget->streamTag << 4) | 0);
+				commands[0] = MAKE_COMMAND(codec->addr, w->nodeID, VERB_SET_CONVERTER_STREAM_CHANNEL, (widget->streamTag << 4) | 0);
 				hda_run_commands(commands, responses, 1);
 				unmute_widget(codec, w);
 				if (w->caps & WIDGET_CAP_DIGITAL)
@@ -965,12 +964,10 @@ static void __cdecl release_audio_block_appy_time(DWORD waveHdrSegOff)
 static void release_block(struct HDAStream *stream, struct AudioBlock *block)
 {
 	dprintf("release_block 0x%08X\n", block);
-	// TODO: schedule appy time
 	// Ring-3 code can only be called at "appy-time", and certainly not in an
 	// interrupt handler, so we schedule an appy-time event to notify the ring-3
 	// driver that we are finished with the block.
 	_SHELL_CallAtAppyTime(release_audio_block_appy_time, block->wavHdrSegOff, CAAFL_RING0, 0);
-
 	ASSERT(block == stream->blockList);
 	stream->blockList = block->next;
 	memory_free(block);
@@ -1223,6 +1220,17 @@ DWORD handle_win32_io(DIOCPARAMETERS *diocParams)
 			return ERROR_GEN_FAILURE;
 		if (pBytesReturned != NULL)
 			*pBytesReturned = 256;
+		return ERROR_SUCCESS;
+	case HDA_VXD_GET_CODECS:
+		dprintf("HDA_VXD_GET_CODECS\n");
+		uint16_t codecBits = 0;
+		if (diocParams->cbOutBuffer < sizeof(codecBits))
+			return ERROR_INSUFFICIENT_BUFFER;
+		for (int i = 0; i < MAX_CODECS; i++)
+			codecBits |= (1 << codecs[i].addr);
+		*(uint16_t *)diocParams->lpvOutBuffer = codecBits;
+		if (pBytesReturned != NULL)
+			*pBytesReturned = sizeof(codecBits);
 		return ERROR_SUCCESS;
 	case HDA_VXD_GET_BASE_REGS:
 		dprintf("HDA_VXD_GET_BASE_REGS\n");
